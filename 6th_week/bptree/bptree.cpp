@@ -3,8 +3,10 @@
 #include <sys/time.h>
 #include <algorithm>
 #include <queue>
+#include <mutex>
 using namespace std;
 
+mutex mtx;
 int DATA_SIZE = 1000*1000;
 vector<int> Database(DATA_SIZE);
 
@@ -74,12 +76,6 @@ void print_tree(NODE *node) {
     printf("\n"); fflush(stdout);
 }
 
-void erase_entries(NODE *node) {
-    for (int i = 0; i < N - 1; i++) node->key[i] = 0;
-    for (int i = 0; i < N; i++) node->chi[i] = NULL;
-    node->nkey = 0;
-}
-
 NODE *find_leaf(NODE *node, int key) {
     int kid;
 
@@ -92,7 +88,7 @@ NODE *find_leaf(NODE *node, int key) {
 
 NODE *alloc_leaf(NODE *parent) {
     NODE *node;
-    if (!(node = (NODE *)calloc(1, sizeof(NODE)))) ERR; // メモリを確保することができるかどうか
+    if (!(node = (NODE *)calloc(1, sizeof(NODE)))) ERR;
     node->isLeaf = true;
     node->parent = parent;
     node->nkey = 0;
@@ -111,18 +107,24 @@ NODE *alloc_internal(NODE *parent) {
     return node;
 }
 
-NODE *alloc_root(NODE *left, int key, NODE *right) {
+NODE *alloc_root(NODE *leaf, int key, NODE *leaf_prime) {
     NODE *node;
 
     if (!(node = (NODE *)calloc(1, sizeof(NODE)))) ERR;
     node->parent = NULL;
     node->isLeaf = false;
     node->key[0] = key;
-    node->chi[0] = left;
-    node->chi[1] = right;
+    node->chi[0] = leaf;
+    node->chi[1] = leaf_prime;
     node->nkey = 1;
 
     return node;
+}
+
+void erase_entries(NODE *node) {
+    for (int i = 0; i < N - 1; i++) node->key[i] = 0;
+    for (int i = 0; i < N; i++) node->chi[i] = NULL;
+    node->nkey = 0;
 }
 
 NODE *insert_in_leaf(NODE *leaf, int key, DATA *data) {
@@ -150,127 +152,74 @@ NODE *insert_in_leaf(NODE *leaf, int key, DATA *data) {
     return leaf;
 }
 
-void insert_in_temp(TEMP *temp, int key, void *data) {
-    int i;
-    if (key < temp->key[0]) {
-            for (i = temp->nkey; i > 0; i--) {
-                temp->key[i] = temp->key[i - 1];
-                temp->chi[i] = temp->chi[i - 1];
-            }
-            temp->key[0] = key;
-            temp->chi[0] = (NODE *)data;
-        } else {
-            for (i = 0; i < temp->nkey; i++) {
-                if (key < temp->key[i]) break;
-            }
-            for (int j = temp->nkey; j > i; j--) {
-                temp->key[j] = temp->key[j - 1];
-                temp->chi[j] = temp->chi[j - 1];
-            }
-            temp->key[i] = key;
-            temp->chi[i] = (NODE *)data; 
+void insert_in_parent(NODE *n, int key, NODE *N_prime) {
+    if (n == Root) {
+        Root = alloc_root(n, key, N_prime);
+        n->parent = N_prime->parent = Root;
+        return;    
+    }
+
+    NODE *p = n->parent;
+    int i, j;
+
+    if (p->nkey < N - 1) {
+        for (i = 0; i < p->nkey; i++) {
+            if (key < p->key[i]) break;
         }
-        temp->nkey++;   
-}
-
-void copy_from_left_to_temp(TEMP *temp, NODE *left) {
-    int i;
-    bzero(temp, sizeof(TEMP));
-    for (i = 0; i < (N - 1); i++) {
-        temp->key[i] = left->key[i];
-        temp->chi[i] = left->chi[i];
-    }
-    temp->nkey = N - 1;
-    temp->chi[i] = left->chi[i];
-}
-
-void insert_temp_after_left_child(TEMP *temp, NODE *left, int key, NODE *right) {
-    int left_temp_id = 0;
-    int right_temp_id = 0;
-    int i;
-
-    for (i = 0; i < temp->nkey + 1; i++) {
-        if (temp->chi[i] == left) {
-            left_temp_id = i;
-            right_temp_id = left_temp_id + 1;
-            break;
-        }
-    } 
-    assert(i != temp->nkey + 1);
-
-    for (i = temp->nkey; i > left_temp_id; i--) temp->key[i] = temp->key[i - 1];
-    for (i = temp->nkey + 1; i > right_temp_id; i--) temp->chi[i] = temp->chi[i - 1];
-
-    temp->key[left_temp_id] = key;
-    temp->chi[right_temp_id] = right;
-    temp->nkey++;
-}
-
-void copy_from_temp_to_left_parent(TEMP *temp, NODE *left_parent) {
-    for (int j = 0; j < (int)ceil((N + 1) / 2); j++) {
-        left_parent->key[j] = temp->key[j];
-        left_parent->chi[j] = temp->chi[j];
-        left_parent->nkey++;
-    }
-    left_parent->chi[(int)ceil((N + 1) / 2)] = temp->chi[(int)ceil((N + 1) / 2)];
-}
-
-void copy_from_temp_to_right_parent(TEMP *temp, NODE *right_parent) {
-    int id;
-    for (id = ((int)ceil((N + 1) / 2) + 1); id < N; id++) {
-        right_parent->key[id - ((int)ceil((N + 1) / 2) + 1)] = temp->key[id];
-        right_parent->chi[id - ((int)ceil((N + 1) / 2) + 1)] = temp->chi[id];
-        right_parent->nkey++;
-    }
-    right_parent->chi[id - ((int)ceil((N + 1) / 2) + 1)] = temp->chi[id];
-    for (int k = 0; k < right_parent->nkey + 1; k++) right_parent->chi[k]->parent = right_parent;
-}
-
-void insert_in_parent(NODE *left, int key, NODE *right) {
-    NODE *left_parent;
-    NODE *right_parent;
-
-    if (left == Root) {
-        Root = alloc_root(left, key, right);
-        left->parent = right->parent = Root;
-        return;
-    }
-    left_parent = left->parent;
-
-    if (left_parent->nkey < (N - 1)) { // if p has less than n pointers 
-        int left_child_id = 0;
-        int right_child_id = 0;
-        int i;
-
-        for (i = 0; i < left_parent->nkey + 1; i++) {
-            if (left_parent->chi[i] == left) {
-                left_child_id = i;
-                right_child_id = left_child_id + 1;
-                break;
-            }
-        }
-        for (i = left_parent->nkey; i > left_child_id; i--) left_parent->key[i] = left_parent->key[i - 1];
-        for (i = left_parent->nkey + 1; i > right_child_id; i--) left_parent->chi[i] = left_parent->chi[i - 1];
-
-        left_parent->key[left_child_id] = key;
-        left_parent->chi[right_child_id] = right;
-        left_parent->nkey++;
+        for (j = p->nkey; j > i; j--) p->key[j] = p->key[j - 1];
+        for (j = p->nkey + 1; j > i + 1; j--) p->chi[j] = p->chi[j - 1];
+        p->key[i] = key;
+        p->chi[i+1] = N_prime;
+        p->nkey++;
     } else {
         TEMP temp;
+        int i;
+        for (i = 0; i < N - 1; i++) {
+            temp.key[i] = p->key[i];
+            temp.chi[i] = p->chi[i];
+        }
+        temp.chi[i] = p->chi[i];
+        temp.nkey = N - 1;
 
-        copy_from_left_to_temp(&temp, left_parent);
+        int pos;
+        for (pos = 0; pos < temp.nkey; pos++) {
+            if (key < temp.key[pos]) break;
+        }
+        for (int i = temp.nkey; i > pos; i--) temp.key[i] = temp.key[i - 1];
+        for (int i = temp.nkey + 1; i > pos + 1; i--) temp.chi[i] = temp.chi[i - 1];
+        temp.key[pos] = key;
+        temp.chi[pos + 1] = N_prime;
+        temp.nkey++;
 
-        insert_temp_after_left_child(&temp, left, key, right);
+        erase_entries(p);
+        NODE *p_prime = alloc_internal(p->parent);
+        p_prime->isLeaf = false;
+
+        for (int i = 0; i < p->nkey; i++) {
+            p->key[i] = temp.key[i];
+            p->chi[i] = temp.chi[i];
+        }
+        p->chi[p->nkey] = temp.chi[p->nkey];
+
+        int k_prime = temp.key[(int)ceil((double)N / (double)2)];
+
+        for (int i = 0; i < (int)ceil((N + 1) / 2); i++) {
+            p->key[i] = temp.key[i];
+            p->chi[i] = temp.chi[i];
+            p->nkey++;
+        }
+        p->chi[(int)ceil((N + 1) / 2)] = temp.chi[(int)ceil((N + 1) / 2)];
+
+        int id;
+        for (id = ((int)ceil((N + 1) / 2) + 1); id < N; id++) {
+            p_prime->key[id - ((int)ceil((N + 1) / 2) + 1)] = temp.key[id];
+            p_prime->chi[id - ((int)ceil((N + 1) / 2) + 1)] = temp.chi[id];
+            p_prime->nkey++;
+        }
+        p_prime->chi[id - ((int)ceil((N + 1) / 2) + 1)] = temp.chi[id];
+        for (int k = 0; k < p_prime->nkey + 1; k++) p_prime->chi[k]->parent = p_prime;
         
-        erase_entries(left_parent);
-        right_parent = alloc_internal(left_parent->parent); // create node_prime
-        copy_from_temp_to_left_parent(&temp, left_parent);
-
-        int key_parent = temp.key[(int)ceil((double)N / (double)2)];
-
-        // copy from temp to right_parent
-        copy_from_temp_to_right_parent(&temp, right_parent);
-        insert_in_parent(left_parent, key_parent, right_parent);
+        insert_in_parent(p, k_prime, p_prime);
     }
 }
 
@@ -285,37 +234,61 @@ void insert(int key, DATA *data) {
     if (leaf->nkey < (N-1)) insert_in_leaf(leaf, key, data);
     else {
         NODE *left = leaf;
-        NODE *right = alloc_leaf(leaf->parent);
+        NODE *new_leaf = alloc_leaf(leaf->parent);
         TEMP temp;
+        int i, j;
 
-        copy_from_left_to_temp(&temp, left);
-        insert_in_temp(&temp, key, data);
+        for (i = 0; i < N - 1; i++) {
+            temp.key[i] = left->key[i];
+            temp.chi[i] = left->chi[i];
+        }
+        temp.chi[i] = left->chi[i];
+        temp.nkey = N - 1;
 
-        right->chi[N - 1] = left->chi[N - 1];
-        left->chi[N - 1] = right;
+        int k;
+        if (key < temp.key[0]) {
+            for (k = temp.nkey; i > 0; i--) {
+                temp.key[i] = temp.key[i - 1];
+                temp.chi[i] = temp.chi[i - 1];
+            }
+            temp.key[0] = key;
+            temp.chi[0] = (NODE *)data;
+        } else {
+            for (k = 0; k < temp.nkey; k++) {
+                if (key < temp.key[k]) break;
+            }
+            for (int j = temp.nkey; j > k; j--) {
+                temp.key[j] = temp.key[j - 1];
+                temp.chi[j] = temp.chi[j - 1];
+            }
+            temp.key[k] = key;
+            temp.chi[k] = (NODE *)data;
+        }
+        temp.nkey++;
+
+        new_leaf->chi[N - 1] = left->chi[N - 1];
+        left->chi[N - 1] = new_leaf;
         erase_entries(left);
 
-        // copy from temp to left
         for (int i = 0; i < (int)ceil((double)N / (double)2); i++) {
             left->key[i] = temp.key[i];
             left->chi[i] = temp.chi[i];
             left->nkey++;
         }
 
-        // copy from temp to right
         for (int i = (int)ceil((double)N / (double)2); i < N; i++) {
-            right->key[i - (int)ceil((double)N / (double)2)] = temp.key[i];
-            right->chi[i - (int)ceil((double)N / (double)2)] = temp.chi[i];
-            right->nkey++;
+            new_leaf->key[i - (int)ceil((double)N / (double)2)] = temp.key[i];
+            new_leaf->chi[i - (int)ceil((double)N / (double)2)] = temp.chi[i];
+            new_leaf->nkey++;
         }
 
-        int smallest_key = right->key[0];
-        insert_in_parent(left, smallest_key, right);
+        int smallest = new_leaf->key[0];
+        insert_in_parent(leaf, smallest, new_leaf);
     }
 }
 
 void bulk_insert(NODE *root, const vector<int> &data) {
-    for (int value : data) {
+    for (int value: data) {
         insert(value, NULL);
     }
 }
@@ -350,27 +323,39 @@ int interactive() {
 int main(int argc, char *argv[]) {
     init();
     init_root();
+    
     struct timeval begin, end;
 
     printf("-----Insert-----\n");
     int mode, stop;
     printf("Choose the mode: 1 is auto insert, 2 is manual: ");
     cin >> mode;
+
     if (mode == 1) {
         begin = cur_time();
-        bulk_insert(Root, Database);
-        print_tree_auto(Root);
+        {
+            lock_guard<mutex> guard(mtx); // スコープ内でロック
+            bulk_insert(Root, Database);
+            print_tree_auto(Root);
+        }
         end = cur_time();
     } else if (mode == 2) {
         while (true) {
-		    insert(interactive(), NULL);
-    	    print_tree(Root);
+            int key;
+            cout << "Enter a key to insert (or -1 to exit): ";
+            cin >> key;
+            if (key == -1) break;
+
+            {
+                lock_guard<mutex> guard(mtx); // スコープ内でロック
+                insert(key, NULL);
+                print_tree(Root);
+            }
         }
     } else {
-        cout << "Please enter 1 or 2" << endl;
+        cout << "Invalid input. Please enter 1 or 2." << std::endl;
+        return 1; // 無効な入力の場合はプログラムを終了
     }
-	
-    
 
     printf("-----Search-----\n");
     int key;
