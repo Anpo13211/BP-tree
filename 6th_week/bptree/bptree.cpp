@@ -6,7 +6,7 @@
 #include <mutex>
 using namespace std;
 
-mutex mtx;
+mutex leaf_mtx;
 int DATA_SIZE = 1000*1000;
 vector<int> Database(DATA_SIZE);
 
@@ -27,7 +27,6 @@ struct timeval cur_time(void) {
     return t;
 }
 
-// Print the tree
 void print_tree_core_auto(NODE* current) {
     printf("[");
     for (int i = 0; i < current->nkey; i++) {
@@ -79,7 +78,9 @@ void print_tree(NODE *node) {
 NODE *find_leaf(NODE *node, int key) {
     int kid;
 
-    if (node->isLeaf) return node;
+    if (node->isLeaf) {
+        return node;
+    }
     for (kid = 0; kid < node->nkey; kid++) {
         if (key < node->key[kid]) break;
     }
@@ -192,6 +193,7 @@ void insert_in_parent(NODE *n, int key, NODE *N_prime) {
         temp.nkey++;
 
         erase_entries(p);
+
         NODE *p_prime = alloc_internal(p->parent);
         p_prime->isLeaf = false;
 
@@ -224,17 +226,25 @@ void insert_in_parent(NODE *n, int key, NODE *N_prime) {
 }
 
 void insert(int key, DATA *data) {
+    leaf_mtx.lock();
     NODE *leaf;
 
     if (Root == NULL) {
         leaf = alloc_leaf(NULL);
         Root = leaf;
-    } else leaf = find_leaf(Root, key);
+    } else {
+        leaf = find_leaf(Root, key);
+    }
 
-    if (leaf->nkey < (N-1)) insert_in_leaf(leaf, key, data);
+    if (leaf->nkey < (N-1)) {
+        insert_in_leaf(leaf, key, data);
+        leaf_mtx.unlock();
+    }
     else {
         NODE *left = leaf;
+
         NODE *new_leaf = alloc_leaf(leaf->parent);
+
         TEMP temp;
         int i, j;
 
@@ -284,6 +294,8 @@ void insert(int key, DATA *data) {
 
         int smallest = new_leaf->key[0];
         insert_in_parent(leaf, smallest, new_leaf);
+
+        leaf_mtx.unlock();
     }
 }
 
@@ -298,18 +310,24 @@ void init_root(void) {
 }
 
 void search(int key) {
+    unique_lock<mutex> lock(leaf_mtx);
+
     NODE *n = find_leaf(Root, key);
     bool flag = false;
-    for (int i = 0; i < n->nkey + 1; i++) {
+    for (int i = 0; i < n->nkey; i++) {
         if (n->key[i] == key) {
             flag = true;
             break;
         }
     }
-    if (flag == true) {
+    if (flag) {
         cout << "Key [ " << key << " ] has found." << endl;
-    } else cout << "There is no this key" << endl;
+    } else {
+        cout << "There is no this key" << endl;
+    }
+
 }
+
 
 int interactive() {
   int key;
@@ -333,24 +351,19 @@ int main(int argc, char *argv[]) {
 
     if (mode == 1) {
         begin = cur_time();
-        {
-            lock_guard<mutex> guard(mtx); // スコープ内でロック
-            bulk_insert(Root, Database);
-            print_tree_auto(Root);
-        }
+        bulk_insert(Root, Database);
+        print_tree_auto(Root);
         end = cur_time();
     } else if (mode == 2) {
         while (true) {
+            begin = cur_time();
             int key;
             cout << "Enter a key to insert (or -1 to exit): ";
             cin >> key;
             if (key == -1) break;
-
-            {
-                lock_guard<mutex> guard(mtx); // スコープ内でロック
-                insert(key, NULL);
-                print_tree(Root);
-            }
+            insert(key, NULL);
+            print_tree(Root);
+            end = cur_time();
         }
     } else {
         cout << "Invalid input. Please enter 1 or 2." << std::endl;
