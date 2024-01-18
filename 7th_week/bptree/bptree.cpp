@@ -12,6 +12,14 @@ mutex leaf_mtx;
 int DATA_SIZE = 1000*1000;
 vector<int> Database(DATA_SIZE);
 
+void print_performance(struct timeval start, struct timeval end) {
+    long long time_diff_microsec = (end.tv_sec - start.tv_sec) * 1000 * 1000 + (end.tv_usec - start.tv_usec);
+    double time_diff_sec = time_diff_microsec / 1000000.0;
+    double requests_per_sec = DATA_SIZE / time_diff_sec;
+
+    printf("%9.2f req/sec (lat:%7lld usec)\n", requests_per_sec, time_diff_microsec);
+}
+
 void init_data() {
     Database[0] = rand() % 2;
     for (int i = 1; i < DATA_SIZE; ++i) {
@@ -318,11 +326,13 @@ void search(int key) {
             break;
         }
     }
-    if (flag) {
-        cout << "Key [ " << key << " ] has found." << endl;
-    } else {
-        cout << "There is no this key" << endl;
+    if (!flag){
+        cout << "Key not found: " << key << endl;
     }
+}
+
+void search_single() {
+    for (int i = 0; i < (int)Database.size(); i++) search(Database[i]);
 }
 
 void update(int key, DATA *new_data) {
@@ -415,16 +425,20 @@ int main(int argc, char *argv[]) {
         bulk_insert(Root, Database);
         // print_tree_auto(Root);
         end = cur_time();
+        print_performance(begin, end);
     } else if (mode == 2) {
         while (true) {
             begin = cur_time();
             int key;
             cout << "Enter a key to insert (or -1 to exit): ";
             cin >> key;
-            if (key == -1) break;
             insert(key, NULL);
             print_tree(Root);
             end = cur_time();
+            if (key == -1) {
+                print_performance(begin, end);
+                break;
+            };
         }
     } else {
         cout << "Invalid input. Please enter 1 or 2." << endl;
@@ -441,10 +455,10 @@ int main(int argc, char *argv[]) {
     update(update_key, new_data);
 
     printf("-----Search-----\n");
-    int key;
-    printf("The key you want to search: ");
-    cin >> key;
-    search(key);
+    begin = cur_time();
+    search_single();
+    end = cur_time();
+    print_performance(begin, end);
 
     multithread_test();
 
