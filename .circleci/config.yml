@@ -24,6 +24,7 @@ jobs:
       - add_ssh_keys:
         fingerprints:
           - "SHA256:zs+bHZTFHdV9DCwFvfad+2FZQP10V8ZiIMz/fWCN8AM"
+      - run: sh ./deploy.sh
 
 # Orchestrate jobs using workflows
 # See: https://circleci.com/docs/workflows/ & https://circleci.com/docs/configuration-reference/#workflows
