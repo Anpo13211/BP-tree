@@ -5,7 +5,7 @@ git config --global user.email "<>"
 git checkout $target_branch 
 git reset --hard origin/main 
 
-gcc -o a.out 6th_week/bptree_test.c -DTEST
+gcc -o a.out 6th_week/bptree_test.cpp 6th_week/bptree.cpp -DTEST
 echo "output of a.out: $(./a.out)" > a.txt 
 
 git add a.out a.txt 
