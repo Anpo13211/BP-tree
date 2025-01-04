@@ -1,14 +1,24 @@
 #include "bptree.h"
+#include <pthread.h>
 #include <vector>
 #include <sys/time.h>
 #include <algorithm>
 #include <queue>
+#include <thread>
 #include <mutex>
 using namespace std;
 
 mutex leaf_mtx;
 int DATA_SIZE = 1000*1000;
 vector<int> Database(DATA_SIZE);
+
+void print_performance(struct timeval start, struct timeval end) {
+    long long time_diff_microsec = (end.tv_sec - start.tv_sec) * 1000 * 1000 + (end.tv_usec - start.tv_usec);
+    double time_diff_sec = time_diff_microsec / 1000000.0;
+    double requests_per_sec = DATA_SIZE / time_diff_sec;
+
+    printf("%9.2f req/sec (lat:%7lld usec)\n", requests_per_sec, time_diff_microsec);
+}
 
 void init_data() {
     Database[0] = rand() % 2;
@@ -226,7 +236,6 @@ void insert_in_parent(NODE *n, int key, NODE *N_prime) {
 }
 
 void insert(int key, DATA *data) {
-    leaf_mtx.lock();
     NODE *leaf;
 
     if (Root == NULL) {
@@ -238,7 +247,6 @@ void insert(int key, DATA *data) {
 
     if (leaf->nkey < (N-1)) {
         insert_in_leaf(leaf, key, data);
-        leaf_mtx.unlock();
     }
     else {
         NODE *left = leaf;
@@ -294,8 +302,6 @@ void insert(int key, DATA *data) {
 
         int smallest = new_leaf->key[0];
         insert_in_parent(leaf, smallest, new_leaf);
-
-        leaf_mtx.unlock();
     }
 }
 
@@ -320,14 +326,79 @@ void search(int key) {
             break;
         }
     }
-    if (flag) {
-        cout << "Key [ " << key << " ] has found." << endl;
-    } else {
-        cout << "There is no this key" << endl;
+    if (!flag){
+        cout << "Key not found: " << key << endl;
     }
-
 }
 
+void search_single() {
+    for (int i = 0; i < (int)Database.size(); i++) search(Database[i]);
+}
+
+void update(int key, DATA *new_data) {
+    leaf_mtx.lock();
+
+    NODE *leaf = find_leaf(Root, key);
+    if (leaf == nullptr || !leaf->isLeaf) {
+        cout << "Key [ " << key << " ] not found." << endl;
+        leaf_mtx.unlock();
+        return;
+    }
+
+    bool updated = false;
+    for (int i = 0; i < leaf->nkey; i++) {
+        if (leaf->key[i] == key) {
+            
+            DATA *old_data = (DATA *)leaf->chi[i];
+            if (old_data != nullptr) {
+                free(old_data);
+            }
+
+            leaf->chi[i] = (NODE *)new_data;
+            updated = true;
+            break;
+        }
+    }
+
+    if (updated) {
+        cout << "Key [ " << key << " ] updated successfully." << endl;
+    } else {
+        cout << "Key [ " << key << " ] not found in leaf node." << endl;
+    }
+    leaf_mtx.unlock();
+}
+
+struct ThreadData {
+    int key;
+    DATA *data;
+};
+
+void *thread_function(void *arg) {
+    ThreadData *threadData = static_cast<ThreadData*>(arg);
+
+    update(threadData->key, threadData->data);
+
+    delete threadData;
+    return nullptr;
+}
+
+void multithread_test() {
+    const int num_threads = 10;
+    pthread_t threads[num_threads];
+
+    for (int i = 0; i < 10; ++i) {
+        ThreadData *data = new ThreadData;
+        data->key = i;
+        data->data = new DATA;
+        data->data->val = Database[i];
+
+        pthread_create(&threads[i], nullptr, thread_function, data);
+    }
+
+    for (int i = 0; i < num_threads; ++i) {
+        pthread_join(threads[i], nullptr);
+    }
+}
 
 int interactive() {
   int key;
@@ -352,29 +423,44 @@ int main(int argc, char *argv[]) {
     if (mode == 1) {
         begin = cur_time();
         bulk_insert(Root, Database);
-        print_tree_auto(Root);
+        // print_tree_auto(Root);
         end = cur_time();
+        print_performance(begin, end);
     } else if (mode == 2) {
         while (true) {
             begin = cur_time();
             int key;
             cout << "Enter a key to insert (or -1 to exit): ";
             cin >> key;
-            if (key == -1) break;
             insert(key, NULL);
             print_tree(Root);
             end = cur_time();
+            if (key == -1) {
+                print_performance(begin, end);
+                break;
+            };
         }
     } else {
-        cout << "Invalid input. Please enter 1 or 2." << std::endl;
+        cout << "Invalid input. Please enter 1 or 2." << endl;
         return 1; // 無効な入力の場合はプログラムを終了
     }
 
+    int update_key;
+    cout << "Enter a key to udpate: ";
+    cin >> update_key;
+    DATA *new_data = new DATA;
+    new_data->key = update_key;
+    new_data->val = 10;
+
+    update(update_key, new_data);
+
     printf("-----Search-----\n");
-    int key;
-    printf("The key you want to search: ");
-    cin >> key;
-    search(key);
+    begin = cur_time();
+    search_single();
+    end = cur_time();
+    print_performance(begin, end);
+
+    multithread_test();
 
 	return 0;
 }
