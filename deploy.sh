@@ -11,7 +11,7 @@ git checkout $target_branch
 git reset --hard origin/main
 
 # Compile the source files
-gcc -o a.out 6th_week/bptree_test.cpp 6th_week/bptree.cpp -DTEST
+g++ -o a.out 6th_week/bptree/bptree_test.cpp 6th_week/bptree/bptree.cpp -DTEST
 if [ $? -ne 0 ]; then
     echo "Compilation failed"
     exit 1
