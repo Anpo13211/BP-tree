@@ -19,7 +19,7 @@ typedef struct _DATA {
 
 typedef struct _NODE {
 	bool isLeaf;
-	struct _NODE *chi[N];
+	struct _NODE *child[N];
 	int key[N-1]; 
 	int nkey;
 	struct _NODE *parent;
@@ -27,7 +27,7 @@ typedef struct _NODE {
 
 typedef struct _TEMP {
 	bool isLeaf;
-	NODE *chi[N+1]; // for internal split (for leaf, only N is enough)
+	NODE *child[N+1]; // for internal split (for leaf, only N is enough)
 	int key[N]; // for leaf split
 	int nkey;
 } TEMP;
