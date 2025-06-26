@@ -40,11 +40,11 @@ struct timeval cur_time(void) {
 void print_tree_core_auto(NODE* current) {
     printf("[");
     for (int i = 0; i < current->nkey; i++) {
-        if (!current->isLeaf) print_tree_core_auto(current->chi[i]);
+        if (!current->isLeaf) print_tree_core_auto(current->childld[i]);
         printf("%d", current->key[i]);
         if (i != current->nkey-1 && current->isLeaf) putchar(' ');
     }
-    if (!current->isLeaf) print_tree_core_auto(current->chi[current->nkey]);
+    if (!current->isLeaf) print_tree_core_auto(current->childld[current->nkey]);
     printf("]");
 }
 
@@ -66,7 +66,7 @@ void print_tree_core(NODE *current) {
                     cout << tNode->key[j] << " ";
  
             for (int j = 0; j < tNode->nkey + 1; j++) {
-                if (tNode->chi[j] != NULL) q.push(tNode->chi[j]);
+                if (tNode->childld[j] != NULL) q.push(tNode->childld[j]);
             }
  
             cout << "\t";
@@ -94,7 +94,7 @@ NODE *find_leaf(NODE *node, int key) {
     for (kid = 0; kid < node->nkey; kid++) {
         if (key < node->key[kid]) break;
     }
-    return find_leaf(node->chi[kid], key);
+    return find_leaf(node->childld[kid], key);
 }
 
 NODE *alloc_leaf(NODE *parent) {
@@ -125,8 +125,8 @@ NODE *alloc_root(NODE *leaf, int key, NODE *leaf_prime) {
     node->parent = NULL;
     node->isLeaf = false;
     node->key[0] = key;
-    node->chi[0] = leaf;
-    node->chi[1] = leaf_prime;
+    node->childld[0] = leaf;
+    node->childld[1] = leaf_prime;
     node->nkey = 1;
 
     return node;
@@ -134,7 +134,7 @@ NODE *alloc_root(NODE *leaf, int key, NODE *leaf_prime) {
 
 void erase_entries(NODE *node) {
     for (int i = 0; i < N - 1; i++) node->key[i] = 0;
-    for (int i = 0; i < N; i++) node->chi[i] = NULL;
+    for (int i = 0; i < N; i++) node->childld[i] = NULL;
     node->nkey = 0;
 }
 
@@ -142,21 +142,21 @@ NODE *insert_in_leaf(NODE *leaf, int key, DATA *data) {
     int i;
     if (key < leaf->key[0]) {
         for (i = leaf->nkey; i > 0; i--) {
-            leaf->chi[i] = leaf->chi[i - 1];
+            leaf->childld[i] = leaf->childld[i - 1];
             leaf->key[i] = leaf->key[i - 1];
         }
         leaf->key[0] = key;
-        leaf->chi[0] = (NODE *)data;
+        leaf->childld[0] = (NODE *)data;
     } else {
         for (i = 0; i < leaf->nkey; i++) {
             if (key < leaf->key[i]) break;
         }
         for (int j = leaf->nkey; j > i; j--) {
-            leaf->chi[j] = leaf->chi[j - 1];
+            leaf->childld[j] = leaf->childld[j - 1];
             leaf->key[j] = leaf->key[j - 1];
         }
         leaf->key[i] = key;
-        leaf->chi[i] = (NODE *)data; 
+        leaf->childld[i] = (NODE *)data; 
     }
     leaf->nkey++;
 
@@ -178,18 +178,18 @@ void insert_in_parent(NODE *n, int key, NODE *N_prime) {
             if (key < p->key[i]) break;
         }
         for (j = p->nkey; j > i; j--) p->key[j] = p->key[j - 1];
-        for (j = p->nkey + 1; j > i + 1; j--) p->chi[j] = p->chi[j - 1];
+        for (j = p->nkey + 1; j > i + 1; j--) p->childld[j] = p->childld[j - 1];
         p->key[i] = key;
-        p->chi[i+1] = N_prime;
+        p->childld[i+1] = N_prime;
         p->nkey++;
     } else {
         TEMP temp;
         int i;
         for (i = 0; i < N - 1; i++) {
             temp.key[i] = p->key[i];
-            temp.chi[i] = p->chi[i];
+            temp.childld[i] = p->childld[i];
         }
-        temp.chi[i] = p->chi[i];
+        temp.childld[i] = p->childld[i];
         temp.nkey = N - 1;
 
         int pos;
@@ -197,9 +197,9 @@ void insert_in_parent(NODE *n, int key, NODE *N_prime) {
             if (key < temp.key[pos]) break;
         }
         for (int i = temp.nkey; i > pos; i--) temp.key[i] = temp.key[i - 1];
-        for (int i = temp.nkey + 1; i > pos + 1; i--) temp.chi[i] = temp.chi[i - 1];
+        for (int i = temp.nkey + 1; i > pos + 1; i--) temp.childld[i] = temp.childld[i - 1];
         temp.key[pos] = key;
-        temp.chi[pos + 1] = N_prime;
+        temp.childld[pos + 1] = N_prime;
         temp.nkey++;
 
         erase_entries(p);
@@ -209,27 +209,27 @@ void insert_in_parent(NODE *n, int key, NODE *N_prime) {
 
         for (int i = 0; i < p->nkey; i++) {
             p->key[i] = temp.key[i];
-            p->chi[i] = temp.chi[i];
+            p->childld[i] = temp.childld[i];
         }
-        p->chi[p->nkey] = temp.chi[p->nkey];
+        p->childld[p->nkey] = temp.childld[p->nkey];
 
         int k_prime = temp.key[(int)ceil((double)N / (double)2)];
 
         for (int i = 0; i < (int)ceil((N + 1) / 2); i++) {
             p->key[i] = temp.key[i];
-            p->chi[i] = temp.chi[i];
+            p->childld[i] = temp.childld[i];
             p->nkey++;
         }
-        p->chi[(int)ceil((N + 1) / 2)] = temp.chi[(int)ceil((N + 1) / 2)];
+        p->childld[(int)ceil((N + 1) / 2)] = temp.childld[(int)ceil((N + 1) / 2)];
 
         int id;
         for (id = ((int)ceil((N + 1) / 2) + 1); id < N; id++) {
             p_prime->key[id - ((int)ceil((N + 1) / 2) + 1)] = temp.key[id];
-            p_prime->chi[id - ((int)ceil((N + 1) / 2) + 1)] = temp.chi[id];
+            p_prime->childld[id - ((int)ceil((N + 1) / 2) + 1)] = temp.childld[id];
             p_prime->nkey++;
         }
-        p_prime->chi[id - ((int)ceil((N + 1) / 2) + 1)] = temp.chi[id];
-        for (int k = 0; k < p_prime->nkey + 1; k++) p_prime->chi[k]->parent = p_prime;
+        p_prime->childld[id - ((int)ceil((N + 1) / 2) + 1)] = temp.childld[id];
+        for (int k = 0; k < p_prime->nkey + 1; k++) p_prime->childld[k]->parent = p_prime;
         
         insert_in_parent(p, k_prime, p_prime);
     }
@@ -258,45 +258,45 @@ void insert(int key, DATA *data) {
 
         for (i = 0; i < N - 1; i++) {
             temp.key[i] = left->key[i];
-            temp.chi[i] = left->chi[i];
+            temp.child[i] = left->child[i];
         }
-        temp.chi[i] = left->chi[i];
+        temp.child[i] = left->child[i];
         temp.nkey = N - 1;
 
         int k;
         if (key < temp.key[0]) {
             for (k = temp.nkey; i > 0; i--) {
                 temp.key[i] = temp.key[i - 1];
-                temp.chi[i] = temp.chi[i - 1];
+                temp.child[i] = temp.child[i - 1];
             }
             temp.key[0] = key;
-            temp.chi[0] = (NODE *)data;
+            temp.child[0] = (NODE *)data;
         } else {
             for (k = 0; k < temp.nkey; k++) {
                 if (key < temp.key[k]) break;
             }
             for (int j = temp.nkey; j > k; j--) {
                 temp.key[j] = temp.key[j - 1];
-                temp.chi[j] = temp.chi[j - 1];
+                temp.child[j] = temp.child[j - 1];
             }
             temp.key[k] = key;
-            temp.chi[k] = (NODE *)data;
+            temp.child[k] = (NODE *)data;
         }
         temp.nkey++;
 
-        new_leaf->chi[N - 1] = left->chi[N - 1];
-        left->chi[N - 1] = new_leaf;
+        new_leaf->child[N - 1] = left->child[N - 1];
+        left->child[N - 1] = new_leaf;
         erase_entries(left);
 
         for (int i = 0; i < (int)ceil((double)N / (double)2); i++) {
             left->key[i] = temp.key[i];
-            left->chi[i] = temp.chi[i];
+            left->child[i] = temp.child[i];
             left->nkey++;
         }
 
         for (int i = (int)ceil((double)N / (double)2); i < N; i++) {
             new_leaf->key[i - (int)ceil((double)N / (double)2)] = temp.key[i];
-            new_leaf->chi[i - (int)ceil((double)N / (double)2)] = temp.chi[i];
+            new_leaf->child[i - (int)ceil((double)N / (double)2)] = temp.child[i];
             new_leaf->nkey++;
         }
 
@@ -349,12 +349,12 @@ void update(int key, DATA *new_data) {
     for (int i = 0; i < leaf->nkey; i++) {
         if (leaf->key[i] == key) {
             
-            DATA *old_data = (DATA *)leaf->chi[i];
+            DATA *old_data = (DATA *)leaf->child[i];
             if (old_data != nullptr) {
                 free(old_data);
             }
 
-            leaf->chi[i] = (NODE *)new_data;
+            leaf->child[i] = (NODE *)new_data;
             updated = true;
             break;
         }
